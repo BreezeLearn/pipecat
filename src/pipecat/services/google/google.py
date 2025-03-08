@@ -11,8 +11,6 @@ import json
 import os
 import time
 
-from google.api_core.exceptions import DeadlineExceeded
-
 # Suppress gRPC fork warnings
 os.environ["GRPC_ENABLE_FORK_SUPPORT"] = "false"
 
@@ -567,15 +565,10 @@ class GoogleAssistantContextAggregator(OpenAIAssistantContextAggregator):
         run_llm = False
         properties: Optional[FunctionCallResultProperties] = None
 
-        aggregation = self._aggregation.strip()
+        aggregation = self._aggregation
         self.reset()
 
         try:
-            if aggregation:
-                self._context.add_message(
-                    glm.Content(role="model", parts=[glm.Part(text=aggregation)])
-                )
-
             if self._function_call_result:
                 frame = self._function_call_result
                 properties = frame.properties
@@ -615,6 +608,11 @@ class GoogleAssistantContextAggregator(OpenAIAssistantContextAggregator):
                     else:
                         # Default behavior is to run the LLM if there are no function calls in progress
                         run_llm = not bool(self._function_calls_in_progress)
+            else:
+                if aggregation.strip():
+                    self._context.add_message(
+                        glm.Content(role="model", parts=[glm.Part(text=aggregation)])
+                    )
 
             if self._pending_image_frame_message:
                 frame = self._pending_image_frame_message
@@ -1128,8 +1126,6 @@ class GoogleLLMService(LLMService):
                     else:
                         logger.exception(f"{self} error: {e}")
 
-        except DeadlineExceeded:
-            await self._call_event_handler("on_completion_timeout")
         except Exception as e:
             logger.exception(f"{self} exception: {e}")
         finally:
@@ -1176,8 +1172,6 @@ class GoogleLLMService(LLMService):
     def create_context_aggregator(
         context: OpenAILLMContext, *, assistant_expect_stripped_words: bool = True
     ) -> GoogleContextAggregatorPair:
-        if isinstance(context, OpenAILLMContext):
-            context = GoogleLLMContext.upgrade_to_google(context)
         user = GoogleUserContextAggregator(context)
         assistant = GoogleAssistantContextAggregator(
             context, expect_stripped_words=assistant_expect_stripped_words
@@ -1863,3 +1857,152 @@ class GoogleSTTService(STTService):
 
         except Exception as e:
             logger.error(f"Error processing Google STT responses: {e}")
+
+import aiohttp
+from dataclasses import asdict
+
+@dataclass
+class BreezeflowMessage:
+    """Message format for Breezeflow API"""
+    id: str
+    text: str
+    role: str
+
+class BreezeflowLLMService(LLMService):
+    """Implementation of Breezeflow's chat API as an LLM service"""
+    
+    class InputParams(BaseModel):
+        chatbot_id: str
+        api_url: str = "https://breezeflow.io/api/agent/chat"
+
+    def __init__(
+        self,
+        *,
+        params: InputParams,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self._chatbot_id = params.chatbot_id
+        self._api_url = params.api_url
+
+    def can_generate_metrics(self) -> bool:
+        return True
+
+    async def _process_context(self, context: OpenAILLMContext):
+        """Process messages through Breezeflow API"""
+        await self.push_frame(LLMFullResponseStartFrame())
+
+        try:
+            # Convert context messages to Breezeflow format
+            messages = []
+            for msg in context.messages:
+                role = ""
+                text = ""
+
+                # Handle both dict and Content object formats
+                if isinstance(msg, dict):
+                    role = msg['role']
+                    text = msg.get('content', '')
+                else:
+                    # Handle Google Content object
+                    role = "assistant" if msg.role == "model" else msg.role
+                    for part in msg.parts:
+                        if part.text:
+                            text += part.text
+
+                # Convert role if needed
+                if role == "model":
+                    role = "assistant"
+                
+                if text:
+                    messages.append(
+                        BreezeflowMessage(
+                            id=str(time.time()),  # Using timestamp as ID
+                            text=text,
+                            role=role
+                        )
+                    )
+
+            # Get the last user message
+            last_message = messages[-1].text if messages else ""
+
+            # Convert messages to dict format for JSON serialization
+            messages_dict = [asdict(msg) for msg in messages]
+
+            async with aiohttp.ClientSession() as session:
+                async with session.post(
+                    f"{self._api_url}?id={self._chatbot_id}",
+                    headers={"Content-Type": "application/json"},
+                    json={
+                        "message": last_message,
+                        "messages": messages_dict,
+                    }
+                ) as response:
+                    if not response.ok:
+                        error_msg = f"Breezeflow API error: {response.status}"
+                        logger.error(error_msg)
+                        await self.push_frame(ErrorFrame(error=error_msg))
+                        return
+
+                    accumulated_text = ""
+                    async for chunk in response.content.iter_chunks():
+                        if not chunk:
+                            continue
+                        
+                        chunk_text = chunk[0].decode('utf-8')
+                        lines = [line.strip() for line in chunk_text.split('\n') if line.strip()]
+                        
+                        for line in lines:
+                            if line.startswith("0:"):
+                                try:
+                                    content = json.loads(line[2:])
+                                    accumulated_text += content
+                                    await self.push_frame(LLMTextFrame(content))
+                                except json.JSONDecodeError as e:
+                                    logger.error(f"Error parsing chunk: {e}")
+
+            # Push final accumulated text if any
+            if accumulated_text:
+                logger.debug(f"Complete response: {accumulated_text}")
+
+        except Exception as e:
+            logger.exception(f"Error in Breezeflow service: {e}")
+            await self.push_frame(ErrorFrame(error=str(e)))
+        finally:
+            await self.push_frame(LLMFullResponseEndFrame())
+
+    async def process_frame(self, frame: Frame, direction: FrameDirection):
+        await super().process_frame(frame, direction)
+
+        context = None
+
+        if isinstance(frame, OpenAILLMContextFrame):
+            context = frame.context
+        elif isinstance(frame, LLMMessagesFrame):
+            context = OpenAILLMContext(frame.messages)
+        elif isinstance(frame, LLMUpdateSettingsFrame):
+            await self._update_settings(frame.settings)
+        else:
+            await self.push_frame(frame, direction)
+
+        if context:
+            await self._process_context(context)
+
+    @staticmethod
+    def create_context_aggregator(
+        context: OpenAILLMContext, *, assistant_expect_stripped_words: bool = True
+    ) -> GoogleContextAggregatorPair:
+        """Create context aggregator for handling messages.
+        
+        Args:
+            context: The OpenAILLMContext to use
+            assistant_expect_stripped_words: Whether to expect stripped words in assistant responses
+            
+        Returns:
+            GoogleContextAggregatorPair: Pair of user and assistant aggregators
+        """
+        user = GoogleUserContextAggregator(context)
+        assistant = GoogleAssistantContextAggregator(
+            context, expect_stripped_words=assistant_expect_stripped_words
+        )
+        return GoogleContextAggregatorPair(_user=user, _assistant=assistant)
