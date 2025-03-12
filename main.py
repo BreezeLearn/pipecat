@@ -1,14 +1,13 @@
-#
-# Copyright (c) 2024–2025, Daily
-#
-# SPDX-License-Identifier: BSD 2-Clause License
-#
-
 import asyncio
 import os
 import sys
+from typing import Dict, Optional, List, Any
+import uuid
 
 import aiohttp
+from fastapi import FastAPI, HTTPException, BackgroundTasks
+import uvicorn
+from pydantic import BaseModel
 from dotenv import load_dotenv
 from loguru import logger
 from runner import configure
@@ -31,91 +30,210 @@ load_dotenv(override=True)
 logger.remove(0)
 logger.add(sys.stderr, level="DEBUG")
 
+# Store active agent instances
+active_agents: Dict[str, Dict[str, Any]] = {}
 
-async def main():
-    async with aiohttp.ClientSession() as session:
-        (room_url, _) = await configure(session)
+app = FastAPI(title="Agent API")
 
-        transport = DailyTransport(
-            room_url,
-            None,
-            "Respond bot",
-            DailyParams(
-                audio_out_enabled=True,
-                vad_enabled=True,
-                vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=1)),
-                vad_audio_passthrough=True,
-            ),
-        )
 
-        stt = DeepgramSTTService(
-            api_key=os.getenv("DEEPGRAM_API_KEY"),
-            live_options=LiveOptions(
-                model="nova-2-general",
-                language="en-US",
-                smart_format=True,
-                vad_events=True
-            )
-        )
-        tts = DeepgramTTSService(
-    api_key=os.getenv("DEEPGRAM_API_KEY"),
-    voice="aura-helios-en",
-    sample_rate=24000
-)
+class AgentRequest(BaseModel):
+    agent_id: str
+    room_url: Optional[str] = None
+    system_prompt: Optional[str] = "You are a helpful LLM in a WebRTC call. Your goal is to demonstrate your capabilities in a succinct way. Your output will be converted to audio so don't include special characters in your answers. Respond to what the user said in a creative and helpful way."
+    voice: Optional[str] = "aura-helios-en"
 
-        llm = BreezeflowLLMService(
-    params=BreezeflowLLMService.InputParams(
-        chatbot_id="2c5bac06-ddfe-420d-871f-c5478beecad9"
+
+class AgentResponse(BaseModel):
+    agent_id: str
+    instance_id: str
+    status: str
+    room_url: Optional[str] = None
+
+
+async def create_agent_instance(agent_id: str, agent_config: AgentRequest) -> Dict[str, Any]:
+    """Create and start an agent instance."""
+    instance_id = str(uuid.uuid4())
+
+    # Create a session for this agent instance
+    session = aiohttp.ClientSession()
+
+    # Configure room URL or create a new one
+    room_url = agent_config.room_url
+    if not room_url:
+        room_url, _ = await configure(session)
+
+    # Create transport
+    transport = DailyTransport(
+        room_url,
+        None,
+        f"Agent {agent_id}",
+        DailyParams(
+            audio_out_enabled=True,
+            vad_enabled=True,
+            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=1)),
+            vad_audio_passthrough=True,
+        ),
     )
-)
 
-        messages = [
-            {
-                "role": "system",
-                "content": "You are a helpful LLM in a WebRTC call. Your goal is to demonstrate your capabilities in a succinct way. Your output will be converted to audio so don't include special characters in your answers. Respond to what the user said in a creative and helpful way.",
-            },
+    # Create STT service
+    stt = DeepgramSTTService(
+        api_key=os.getenv("DEEPGRAM_API_KEY"),
+        live_options=LiveOptions(
+            model="nova-2-general",
+            language="en-US",
+            smart_format=True,
+            vad_events=True
+        )
+    )
+
+    # Create TTS service
+    tts = DeepgramTTSService(
+        api_key=os.getenv("DEEPGRAM_API_KEY"),
+        voice=agent_config.voice,
+        sample_rate=24000
+    )
+
+    # Create LLM service based on agent_id
+    llm = BreezeflowLLMService(
+        params=BreezeflowLLMService.InputParams(
+            chatbot_id=agent_id
+        )
+    )
+
+    # Initialize conversation context
+    messages = [
+        {
+            "role": "system",
+            "content": agent_config.system_prompt,
+        },
+    ]
+
+    # Create context and aggregator
+    context = OpenAILLMContext(messages)
+    context_aggregator = llm.create_context_aggregator(context)
+
+    # Set up pipeline
+    pipeline = Pipeline(
+        [
+            transport.input(),  # Transport user input
+            stt,  # STT
+            context_aggregator.user(),  # User responses
+            llm,  # LLM
+            tts,  # TTS
+            transport.output(),  # Transport bot output
+            context_aggregator.assistant(),  # Assistant spoken responses
         ]
+    )
 
-        context = OpenAILLMContext(messages)
-        context_aggregator = llm.create_context_aggregator(context)
+    # Create pipeline task
+    task = PipelineTask(
+        pipeline,
+        PipelineParams(
+            allow_interruptions=True,
+            enable_metrics=True,
+            enable_usage_metrics=True,
+            report_only_initial_ttfb=True,
+        ),
+    )
 
-        pipeline = Pipeline(
-            [
-                transport.input(),  # Transport user input
-                stt,  # STT
-                context_aggregator.user(),  # User respones
-                llm,  # LLM
-                tts,  # TTS
-                transport.output(),  # Transport bot output
-                context_aggregator.assistant(),  # Assistant spoken responses
-            ]
+    # Set up event handlers
+    @transport.event_handler("on_first_participant_joined")
+    async def on_first_participant_joined(transport, participant):
+        await transport.capture_participant_transcription(participant["id"])
+        # Kick off the conversation
+        messages.append(
+            {"role": "system", "content": "Please introduce yourself to the user."})
+        await task.queue_frames([context_aggregator.user().get_context_frame()])
+
+    @transport.event_handler("on_participant_left")
+    async def on_participant_left(transport, participant, reason):
+        logger.info(f"Participant left: {participant['id']}")
+        if len(transport.participants) <= 1:  # Only the bot remains
+            logger.info(
+                f"Stopping agent instance {instance_id} as all participants left")
+            await stop_agent(instance_id)
+
+    # Create runner
+    runner = PipelineRunner()
+
+    # Start the pipeline in the background
+    asyncio.create_task(runner.run(task))
+
+    # Store all components for later reference
+    agent_instance = {
+        "instance_id": instance_id,
+        "agent_id": agent_id,
+        "session": session,
+        "transport": transport,
+        "task": task,
+        "runner": runner,
+        "room_url": room_url,
+        "context": context,
+        "messages": messages,
+        "status": "running"
+    }
+
+    return agent_instance
+
+
+async def stop_agent(instance_id: str) -> None:
+    """Stop an agent instance and clean up resources."""
+    if instance_id not in active_agents:
+        return
+
+    agent = active_agents[instance_id]
+
+    try:
+        # Cancel the pipeline task
+        if agent["task"]:
+            await agent["task"].cancel()
+
+        # Close the session
+        if agent["session"]:
+            await agent["session"].close()
+
+        # Update status
+        agent["status"] = "stopped"
+
+        # Remove from active agents
+        del active_agents[instance_id]
+
+        logger.info(f"Agent instance {instance_id} stopped and cleaned up")
+    except Exception as e:
+        logger.error(f"Error stopping agent instance {instance_id}: {e}")
+
+
+@app.post("/agents/start", response_model=AgentResponse)
+async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundTasks):
+    """Start a new agent instance."""
+    try:
+        # Create the agent instance
+        agent_instance = await create_agent_instance(agent_request.agent_id, agent_request)
+        instance_id = agent_instance["instance_id"]
+
+        # Store in active agents
+        active_agents[instance_id] = agent_instance
+
+        logger.info(
+            f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
+
+        return AgentResponse(
+            agent_id=agent_request.agent_id,
+            instance_id=instance_id,
+            status="running",
+            room_url=agent_instance["room_url"]
         )
+    except Exception as e:
+        logger.error(f"Failed to start agent: {e}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start agent: {str(e)}")
 
-        task = PipelineTask(
-            pipeline,
-            PipelineParams(
-                allow_interruptions=True,
-                enable_metrics=True,
-                enable_usage_metrics=True,
-                report_only_initial_ttfb=True,
-            ),
-        )
 
-        @transport.event_handler("on_first_participant_joined")
-        async def on_first_participant_joined(transport, participant):
-            await transport.capture_participant_transcription(participant["id"])
-            # Kick off the conversation.
-            messages.append({"role": "system", "content": "Please introduce yourself to the user."})
-            await task.queue_frames([context_aggregator.user().get_context_frame()])
-
-        # @transport.event_handler("on_participant_left")
-        # async def on_participant_left(transport, participant, reason):
-        #     await task.cancel()
-
-        runner = PipelineRunner()
-
-        await runner.run(task)
+def main():
+    """Run the FastAPI server."""
+    # Start the FastAPI server
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    main()

@@ -1,40 +1,46 @@
-# setup
+# Base image with Python 3.11.5
 FROM python:3.11.5
 
+# Set working directory
 WORKDIR /app
 COPY requirements.txt /app
 COPY *.py /app
 COPY pyproject.toml /app
 
 COPY src/ /app/src/
-COPY examples/ /app/examples/
 
-WORKDIR /app
-RUN ls --recursive /app/
-RUN pip3 install --upgrade -r requirements.txt
-RUN python -m build .
-RUN pip3 install .
-RUN pip3 install gunicorn
-# If running on Ubuntu, Azure TTS requires some extra config
-# https://learn.microsoft.com/en-us/azure/ai-services/speech-service/quickstarts/setup-platform?pivots=programming-language-python&tabs=linux%2Cubuntu%2Cdotnetcli%2Cdotnet%2Cjre%2Cmaven%2Cnodejs%2Cmac%2Cpypi
+# Copy requirements file first (to use Docker's cache for dependency installation)
+COPY requirements.txt /app
 
-RUN wget -O - https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar zxf -
-WORKDIR openssl-1.1.1w
-RUN ./config --prefix=/usr/local
-RUN make -j $(nproc)
-RUN make install_sw install_ssldirs
-RUN ldconfig -v
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    libssl-dev \
+    libasound2 \
+    wget \
+    build-essential \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+RUN pip install --upgrade pip && pip install -r requirements.txt
+
+# Copy remaining app files
+COPY . /app
+
+# OpenSSL Installation (for Azure TTS or any SSL-related requirements)
+RUN wget -O - https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar zxf - && \
+    cd openssl-1.1.1w && \
+    ./config --prefix=/usr/local && \
+    make -j $(nproc) && \
+    make install_sw install_ssldirs && \
+    ldconfig -v
+
 ENV SSL_CERT_DIR=/etc/ssl/certs
-
-#ENV LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
-RUN apt clean
-RUN apt-get update
-RUN apt-get -y install build-essential libssl-dev ca-certificates libasound2 wget
-
 ENV PYTHONUNBUFFERED=1
 
-WORKDIR /app
-
+# Expose the FastAPI app port
 EXPOSE 8000
-# run
-CMD ["gunicorn", "--workers=2", "--log-level", "debug", "--chdir", "examples/server", "--capture-output", "daily-bot-manager:app", "--bind=0.0.0.0:8000"]
+
+# Command to run the FastAPI app using gunicorn
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
