@@ -1,6 +1,7 @@
 import asyncio
 import os
 import sys
+import time
 from typing import Dict, Optional, List, Any
 import uuid
 
@@ -37,6 +38,7 @@ app = FastAPI(title="Agent API")
 
 
 class AgentRequest(BaseModel):
+    """Request model for starting a new agent instance with specified configuration."""
     agent_id: str
     room_url: Optional[str] = None
     system_prompt: Optional[str] = "You are a helpful LLM in a WebRTC call. Your goal is to demonstrate your capabilities in a succinct way. Your output will be converted to audio so don't include special characters in your answers. Respond to what the user said in a creative and helpful way."
@@ -47,7 +49,10 @@ class AgentResponse(BaseModel):
     agent_id: str
     instance_id: str
     status: str
-    room_url: Optional[str] = None
+    room_url: str  # Make room_url required instead of optional
+    room_name: Optional[str] = None
+    created_at: Optional[str] = None
+    room_config: Optional[Dict[str, Any]] = None
 
 
 async def create_agent_instance(agent_id: str, agent_config: AgentRequest) -> Dict[str, Any]:
@@ -203,10 +208,51 @@ async def stop_agent(instance_id: str) -> None:
         logger.error(f"Error stopping agent instance {instance_id}: {e}")
 
 
+@app.get("/")
+async def read_root():
+    """Return a welcome message for the Agent API root endpoint."""
+    return {"message": "Welcome to the Agent API"}
+
+
+async def create_daily_room() -> Dict[str, Any]:
+    """Create a new Daily.co room with 30-minute expiration."""
+    daily_api_key = os.getenv("DAILY_API_KEY")
+    if not daily_api_key:
+        raise HTTPException(status_code=500, detail="DAILY_API_KEY not configured")
+
+    url = "https://api.daily.co/v1/rooms/"
+    headers = {
+        "Content-Type": "application/json",
+        "Authorization": f"Bearer {daily_api_key}"
+    }
+    data = {
+        "properties": {
+            "exp": int(time.time()) + 1800  # 30 minutes in seconds
+        }
+    }
+
+    async with aiohttp.ClientSession() as session:
+        async with session.post(url, headers=headers, json=data) as response:
+            if not response.ok:
+                error_text = await response.text()
+                logger.error(f"Failed to create Daily room: {error_text}")
+                raise HTTPException(status_code=response.status,
+                                    detail="Failed to create Daily room")
+
+            return await response.json()
+
+
 @app.post("/agents/start", response_model=AgentResponse)
 async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundTasks):
     """Start a new agent instance."""
     try:
+        # Create a room if one wasn't provided
+        room_data = None
+        room_url = agent_request.room_url
+        if not room_url:
+            room_data = await create_daily_room()
+            room_url = room_data["url"]
+
         # Create the agent instance
         agent_instance = await create_agent_instance(agent_request.agent_id, agent_request)
         instance_id = agent_instance["instance_id"]
@@ -217,12 +263,21 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
         logger.info(
             f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
 
-        return AgentResponse(
+        # Return response with room details if available
+        response = AgentResponse(
             agent_id=agent_request.agent_id,
             instance_id=instance_id,
             status="running",
-            room_url=agent_instance["room_url"]
+            room_url=room_url
         )
+
+        # Add additional room details if we created the room
+        if room_data:
+            response.room_name = room_data.get("name")
+            response.created_at = room_data.get("created_at")
+            response.room_config = room_data.get("config")
+
+        return response
     except Exception as e:
         logger.error(f"Failed to start agent: {e}")
         raise HTTPException(
