@@ -1,30 +1,34 @@
+"""Main module for the Agent API server that manages real-time audio communication agents.
+Provides endpoints for creating and managing agent instances with WebRTC capabilities.
+"""  # noqa: D205
+
 import asyncio
 import os
 import sys
 import time
-from typing import Dict, Optional, List, Any
 import uuid
+from typing import Any, Dict, List, Optional
 
 import aiohttp
-from fastapi import FastAPI, HTTPException, BackgroundTasks
 import uvicorn
-from pydantic import BaseModel
+from deepgram import LiveOptions
 from dotenv import load_dotenv
+from fastapi import BackgroundTasks, FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
-from runner import configure
+from pydantic import BaseModel
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
-from pipecat.services.google import GoogleLLMService, BreezeflowLLMService
+from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
+from pipecat.services.google import BreezeflowLLMService, GoogleLLMService
 from pipecat.transcriptions.language import Language
 from pipecat.transports.services.daily import DailyParams, DailyTransport
-from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
-from deepgram import LiveOptions
 from pipecat.vad.vad_analyzer import VADParams
-
+from runner import configure
 
 load_dotenv(override=True)
 
@@ -36,6 +40,13 @@ active_agents: Dict[str, Dict[str, Any]] = {}
 
 app = FastAPI(title="Agent API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, replace with your actual domain
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class AgentRequest(BaseModel):
     """Request model for starting a new agent instance with specified configuration."""
@@ -53,165 +64,6 @@ class AgentResponse(BaseModel):
     room_name: Optional[str] = None
     created_at: Optional[str] = None
     room_config: Optional[Dict[str, Any]] = None
-
-
-async def create_agent_instance(agent_id: str, agent_config: AgentRequest) -> Dict[str, Any]:
-    """Create and start an agent instance."""
-    instance_id = str(uuid.uuid4())
-
-    # Create a session for this agent instance
-    session = aiohttp.ClientSession()
-
-    # Configure room URL or create a new one
-    room_url = agent_config.room_url
-    if not room_url:
-        room_url, _ = await configure(session)
-
-    # Create transport
-    transport = DailyTransport(
-        room_url,
-        None,
-        f"Agent {agent_id}",
-        DailyParams(
-            audio_out_enabled=True,
-            vad_enabled=True,
-            vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=1)),
-            vad_audio_passthrough=True,
-        ),
-    )
-
-    # Create STT service
-    stt = DeepgramSTTService(
-        api_key=os.getenv("DEEPGRAM_API_KEY"),
-        live_options=LiveOptions(
-            model="nova-2-general",
-            language="en-US",
-            smart_format=True,
-            vad_events=True
-        )
-    )
-
-    # Create TTS service
-    tts = DeepgramTTSService(
-        api_key=os.getenv("DEEPGRAM_API_KEY"),
-        voice=agent_config.voice,
-        sample_rate=24000
-    )
-
-    # Create LLM service based on agent_id
-    llm = BreezeflowLLMService(
-        params=BreezeflowLLMService.InputParams(
-            chatbot_id=agent_id
-        )
-    )
-
-    # Initialize conversation context
-    messages = [
-        {
-            "role": "system",
-            "content": agent_config.system_prompt,
-        },
-    ]
-
-    # Create context and aggregator
-    context = OpenAILLMContext(messages)
-    context_aggregator = llm.create_context_aggregator(context)
-
-    # Set up pipeline
-    pipeline = Pipeline(
-        [
-            transport.input(),  # Transport user input
-            stt,  # STT
-            context_aggregator.user(),  # User responses
-            llm,  # LLM
-            tts,  # TTS
-            transport.output(),  # Transport bot output
-            context_aggregator.assistant(),  # Assistant spoken responses
-        ]
-    )
-
-    # Create pipeline task
-    task = PipelineTask(
-        pipeline,
-        PipelineParams(
-            allow_interruptions=True,
-            enable_metrics=True,
-            enable_usage_metrics=True,
-            report_only_initial_ttfb=True,
-        ),
-    )
-
-    # Set up event handlers
-    @transport.event_handler("on_first_participant_joined")
-    async def on_first_participant_joined(transport, participant):
-        await transport.capture_participant_transcription(participant["id"])
-        # Kick off the conversation
-        messages.append(
-            {"role": "system", "content": "Please introduce yourself to the user."})
-        await task.queue_frames([context_aggregator.user().get_context_frame()])
-
-    @transport.event_handler("on_participant_left")
-    async def on_participant_left(transport, participant, reason):
-        logger.info(f"Participant left: {participant['id']}")
-        if len(transport.participants) <= 1:  # Only the bot remains
-            logger.info(
-                f"Stopping agent instance {instance_id} as all participants left")
-            await stop_agent(instance_id)
-
-    # Create runner
-    runner = PipelineRunner()
-
-    # Start the pipeline in the background
-    asyncio.create_task(runner.run(task))
-
-    # Store all components for later reference
-    agent_instance = {
-        "instance_id": instance_id,
-        "agent_id": agent_id,
-        "session": session,
-        "transport": transport,
-        "task": task,
-        "runner": runner,
-        "room_url": room_url,
-        "context": context,
-        "messages": messages,
-        "status": "running"
-    }
-
-    return agent_instance
-
-
-async def stop_agent(instance_id: str) -> None:
-    """Stop an agent instance and clean up resources."""
-    if instance_id not in active_agents:
-        return
-
-    agent = active_agents[instance_id]
-
-    try:
-        # Cancel the pipeline task
-        if agent["task"]:
-            await agent["task"].cancel()
-
-        # Close the session
-        if agent["session"]:
-            await agent["session"].close()
-
-        # Update status
-        agent["status"] = "stopped"
-
-        # Remove from active agents
-        del active_agents[instance_id]
-
-        logger.info(f"Agent instance {instance_id} stopped and cleaned up")
-    except Exception as e:
-        logger.error(f"Error stopping agent instance {instance_id}: {e}")
-
-
-@app.get("/")
-async def read_root():
-    """Return a welcome message for the Agent API root endpoint."""
-    return {"message": "Welcome to the Agent API"}
 
 
 async def create_daily_room() -> Dict[str, Any]:
@@ -253,15 +105,31 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
             room_data = await create_daily_room()
             room_url = room_data["url"]
 
-        # Create the agent instance
-        agent_instance = await create_agent_instance(agent_request.agent_id, agent_request)
-        instance_id = agent_instance["instance_id"]
+        # Generate instance ID
+        instance_id = str(uuid.uuid4())
 
-        # Store in active agents
-        active_agents[instance_id] = agent_instance
+        # Start agent runtime in a separate process
+        process = await asyncio.create_subprocess_exec(
+            sys.executable,
+            "src/pipecat/agent_runtime.py",
+            agent_request.agent_id,
+            room_url,
+            agent_request.system_prompt,
+            agent_request.voice,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
 
-        logger.info(
-            f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
+        # Store process info
+        active_agents[instance_id] = {
+            "instance_id": instance_id,
+            "agent_id": agent_request.agent_id,
+            "process": process,
+            "room_url": room_url,
+            "status": "running"
+        }
+
+        logger.info(f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
 
         # Return response with room details if available
         response = AgentResponse(
@@ -271,17 +139,41 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
             room_url=room_url
         )
 
-        # Add additional room details if we created the room
         if room_data:
             response.room_name = room_data.get("name")
             response.created_at = room_data.get("created_at")
             response.room_config = room_data.get("config")
 
         return response
+
     except Exception as e:
         logger.error(f"Failed to start agent: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Failed to start agent: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to start agent: {str(e)}")
+
+async def stop_agent(instance_id: str) -> None:
+    """Stop an agent instance and clean up resources."""
+    if instance_id not in active_agents:
+        return
+
+    agent = active_agents[instance_id]
+
+    try:
+        # Terminate the subprocess
+        if process := agent.get("process"):
+            process.terminate()
+            await process.wait()
+
+        # Remove from active agents
+        del active_agents[instance_id]
+
+        logger.info(f"Agent instance {instance_id} stopped and cleaned up")
+    except Exception as e:
+        logger.error(f"Error stopping agent instance {instance_id}: {e}")
+
+@app.get("/")
+async def read_root():
+    """Return a welcome message for the Agent API root endpoint."""
+    return {"message": "Welcome to the Agent API"}
 
 
 def main():
