@@ -48,6 +48,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
 class AgentRequest(BaseModel):
     """Request model for starting a new agent instance with specified configuration."""
     agent_id: str
@@ -70,7 +71,8 @@ async def create_daily_room() -> Dict[str, Any]:
     """Create a new Daily.co room with 30-minute expiration."""
     daily_api_key = os.getenv("DAILY_API_KEY")
     if not daily_api_key:
-        raise HTTPException(status_code=500, detail="DAILY_API_KEY not configured")
+        raise HTTPException(
+            status_code=500, detail="DAILY_API_KEY not configured")
 
     url = "https://api.daily.co/v1/rooms/"
     headers = {
@@ -92,6 +94,22 @@ async def create_daily_room() -> Dict[str, Any]:
                                     detail="Failed to create Daily room")
 
             return await response.json()
+
+
+async def process_runtime_logs(process: asyncio.subprocess.Process):
+    """Process logs from agent runtime subprocess."""
+    async def read_stream(stream, prefix):
+        while True:
+            line = await stream.readline()
+            if not line:
+                break
+            logger.info(f"{prefix}: {line.decode().strip()}")
+
+    # Start two tasks to read stdout and stderr concurrently
+    await asyncio.gather(
+        read_stream(process.stdout, "Agent stdout"),
+        read_stream(process.stderr, "Agent stderr")
+    )
 
 
 @app.post("/agents/start", response_model=AgentResponse)
@@ -120,6 +138,9 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
             stderr=asyncio.subprocess.PIPE
         )
 
+        # Start log processing in the background
+        background_tasks.add_task(process_runtime_logs, process)
+
         # Store process info
         active_agents[instance_id] = {
             "instance_id": instance_id,
@@ -129,7 +150,8 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
             "status": "running"
         }
 
-        logger.info(f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
+        logger.info(
+            f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
 
         # Return response with room details if available
         response = AgentResponse(
@@ -148,7 +170,9 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
 
     except Exception as e:
         logger.error(f"Failed to start agent: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to start agent: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to start agent: {str(e)}")
+
 
 async def stop_agent(instance_id: str) -> None:
     """Stop an agent instance and clean up resources."""
@@ -169,6 +193,7 @@ async def stop_agent(instance_id: str) -> None:
         logger.info(f"Agent instance {instance_id} stopped and cleaned up")
     except Exception as e:
         logger.error(f"Error stopping agent instance {instance_id}: {e}")
+
 
 @app.get("/")
 async def read_root():
