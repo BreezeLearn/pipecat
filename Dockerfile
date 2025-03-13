@@ -3,14 +3,9 @@ FROM python:3.11.5
 
 # Set working directory
 WORKDIR /app
-COPY requirements.txt /app
-COPY *.py /app
-COPY pyproject.toml /app
 
-COPY src/ /app/src/
-
-# Copy requirements file first (to use Docker's cache for dependency installation)
-COPY requirements.txt /app
+# Copy requirements file first (to leverage Docker's caching mechanism)
+COPY requirements.txt /app/
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -25,8 +20,8 @@ RUN apt-get update && apt-get install -y \
 # Install Python dependencies
 RUN pip install --upgrade pip && pip install -r requirements.txt
 
-# Copy remaining app files
-COPY . /app
+# Copy application source code
+COPY . /app/
 
 # OpenSSL Installation (for Azure TTS or any SSL-related requirements)
 RUN wget -O - https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar zxf - && \
@@ -36,11 +31,12 @@ RUN wget -O - https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar zxf - &
     make install_sw install_ssldirs && \
     ldconfig -v
 
+# Environment variables
 ENV SSL_CERT_DIR=/etc/ssl/certs
 ENV PYTHONUNBUFFERED=1
 
 # Expose the FastAPI app port
 EXPOSE 8000
 
-# Command to run the FastAPI app using gunicorn
+# Command to run the FastAPI app using Uvicorn
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
