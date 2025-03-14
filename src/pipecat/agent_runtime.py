@@ -15,6 +15,8 @@ from pipecat.transports.services.daily import DailyParams, DailyTransport
 from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.vad.vad_analyzer import VADParams
 from deepgram import LiveOptions
+from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
+
 
 load_dotenv(override=True)
 
@@ -66,9 +68,12 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         context = OpenAILLMContext(messages)
         context_aggregator = llm.create_context_aggregator(context)
 
+        rtvi = RTVIProcessor(config=RTVIConfig(config=[]))
+        
         # Set up pipeline
         pipeline = Pipeline([
             transport.input(),
+            rtvi,
             stt,
             context_aggregator.user(),
             llm,
@@ -86,6 +91,7 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
                 enable_usage_metrics=True,
                 report_only_initial_ttfb=True,
             ),
+            observers=[RTVIObserver(rtvi)],
         )
 
         @transport.event_handler("on_first_participant_joined")

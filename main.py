@@ -29,6 +29,8 @@ from pipecat.transcriptions.language import Language
 from pipecat.transports.services.daily import DailyParams, DailyTransport
 from pipecat.vad.vad_analyzer import VADParams
 from runner import configure
+from contextlib import asynccontextmanager
+from pipecat.transports.services.helpers.daily_rest import DailyRESTHelper, DailyRoomParams
 
 load_dotenv(override=True)
 
@@ -38,7 +40,39 @@ logger.add(sys.stderr, level="DEBUG")
 # Store active agent instances
 active_agents: Dict[str, Dict[str, Any]] = {}
 
-app = FastAPI(title="Agent API")
+daily_helpers = {}
+
+def cleanup():
+    """Cleanup function to terminate all bot processes.
+
+    Called during server shutdown.
+    """
+    for entry in active_agents.values():
+        proc = entry[0]
+        proc.terminate()
+        proc.wait()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """FastAPI lifespan manager that handles startup and shutdown tasks.
+
+    - Creates aiohttp session
+    - Initializes Daily API helper
+    - Cleans up resources on shutdown
+    """
+    aiohttp_session = aiohttp.ClientSession()
+    daily_helpers["rest"] = DailyRESTHelper(
+        daily_api_key=os.getenv("DAILY_API_KEY", ""),
+        daily_api_url=os.getenv("DAILY_API_URL", "https://api.daily.co/v1"),
+        aiohttp_session=aiohttp_session,
+    )
+    yield
+    await aiohttp_session.close()
+    cleanup()
+
+
+# Initialize FastAPI app with lifespan manager
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,6 +99,7 @@ class AgentResponse(BaseModel):
     room_name: Optional[str] = None
     created_at: Optional[str] = None
     room_config: Optional[Dict[str, Any]] = None
+    token: str
 
 
 async def create_daily_room() -> Dict[str, Any]:
@@ -153,12 +188,15 @@ async def start_agent(agent_request: AgentRequest, background_tasks: BackgroundT
         logger.info(
             f"Started agent instance {instance_id} for agent {agent_request.agent_id}")
 
+        token = await daily_helpers["rest"].get_token(room_url)
         # Return response with room details if available
         response = AgentResponse(
             agent_id=agent_request.agent_id,
             instance_id=instance_id,
             status="running",
-            room_url=room_url
+            room_url=room_url,
+            token=token
+            
         )
 
         if room_data:
