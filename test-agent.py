@@ -108,9 +108,9 @@ async def main():
             messages.append({"role": "system", "content": "Please introduce yourself to the user."})
             await task.queue_frames([context_aggregator.user().get_context_frame()])
 
-        # @transport.event_handler("on_participant_left")
-        # async def on_participant_left(transport, participant, reason):
-        #     await task.cancel()
+        @transport.event_handler("on_participant_left")
+        async def on_participant_left(transport, participant, reason):
+            await task.cancel()
 
         runner = PipelineRunner()
 
