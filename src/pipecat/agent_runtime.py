@@ -51,11 +51,18 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
             )
         )
 
-        tts = DeepgramTTSService(
-            api_key=os.getenv("DEEPGRAM_API_KEY"),
-            voice=voice,
-            sample_rate=24000
+        tts = AzureTTSService(
+            api_key=os.getenv("AZURE_SPEECH_API_KEY"),
+            region="eastus",
+            # en-US-AvaMultilingualNeural en-US-ShimmerMultilingualNeural
+            voice="en-US-Ava:DragonHDLatestNeural",
         )
+
+        # tts = DeepgramTTSService(
+        #     api_key=os.getenv("DEEPGRAM_API_KEY"),
+        #     voice=voice,
+        #     sample_rate=24000
+        # )
 
         llm = BreezeflowLLMService(
             params=BreezeflowLLMService.InputParams(

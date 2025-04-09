@@ -88,7 +88,7 @@ class AgentRequest(BaseModel):
     agent_id: str
     room_url: Optional[str] = None
     system_prompt: Optional[str] = "You are a helpful LLM in a WebRTC call. Your goal is to demonstrate your capabilities in a succinct way. Your output will be converted to audio so don't include special characters in your answers. Respond to what the user said in a creative and helpful way."
-    voice: Optional[str] = "aura-helios-en"
+    voice: Optional[str] = "en-US-Ava:DragonHDLatestNeural"
 
 
 class AgentResponse(BaseModel):
