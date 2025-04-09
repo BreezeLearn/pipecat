@@ -16,7 +16,7 @@ from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.vad.vad_analyzer import VADParams
 from deepgram import LiveOptions
 from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
-from pipecat.services.azure import AzureTTSService, AzureLLMService
+# from pipecat.services.azure import AzureTTSService, AzureLLMService
 
 load_dotenv(override=True)
 
