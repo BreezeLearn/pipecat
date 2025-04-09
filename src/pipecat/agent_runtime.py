@@ -16,7 +16,7 @@ from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.vad.vad_analyzer import VADParams
 from deepgram import LiveOptions
 from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
-
+from pipecat.services.azure import AzureTTSService, AzureLLMService
 
 load_dotenv(override=True)
 
@@ -51,18 +51,18 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
             )
         )
 
-        tts = AzureTTSService(
-            api_key=os.getenv("AZURE_SPEECH_API_KEY"),
-            region="eastus",
-            # en-US-AvaMultilingualNeural en-US-ShimmerMultilingualNeural
-            voice="en-US-Ava:DragonHDLatestNeural",
-        )
-
-        # tts = DeepgramTTSService(
-        #     api_key=os.getenv("DEEPGRAM_API_KEY"),
-        #     voice=voice,
-        #     sample_rate=24000
+        # tts = AzureTTSService(
+        #     api_key=os.getenv("AZURE_SPEECH_API_KEY"),
+        #     region="eastus",
+        #     # en-US-AvaMultilingualNeural en-US-ShimmerMultilingualNeural
+        #     voice="en-US-Ava:DragonHDLatestNeural",
         # )
+
+        tts = DeepgramTTSService(
+            api_key=os.getenv("DEEPGRAM_API_KEY"),
+            voice=voice,
+            sample_rate=24000
+        )
 
         llm = BreezeflowLLMService(
             params=BreezeflowLLMService.InputParams(
