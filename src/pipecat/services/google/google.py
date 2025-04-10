@@ -1939,7 +1939,9 @@ class BreezeflowLLMService(LLMService):
                     }
                 ) as response:
                     if not response.ok:
-                        error_msg = f"Breezeflow API error: {response.status}"
+                        error_text = await response.text()
+                        error_msg = f"Breezeflow API error: Status {response.status} - {error_text}"
+                        logger.error(error_msg)
                         logger.error(error_msg)
                         await self.push_frame(ErrorFrame(error=error_msg))
                         return
