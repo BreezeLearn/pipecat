@@ -44,11 +44,8 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         stt = DeepgramSTTService(
             api_key=os.getenv("DEEPGRAM_API_KEY"),
             live_options=LiveOptions(
-                model="nova-2-general",
-                language="en-US",
-                smart_format=True,
-                vad_events=True
-            )
+                model="nova-2-general", language="en-US", smart_format=True, vad_events=True
+            ),
         )
 
         # tts = AzureTTSService(
@@ -59,16 +56,10 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         # )
 
         tts = DeepgramTTSService(
-            api_key=os.getenv("DEEPGRAM_API_KEY"),
-            voice=voice,
-            sample_rate=24000
+            api_key=os.getenv("DEEPGRAM_API_KEY"), voice=voice, sample_rate=24000
         )
 
-        llm = BreezeflowLLMService(
-            params=BreezeflowLLMService.InputParams(
-                chatbot_id=agent_id
-            )
-        )
+        llm = BreezeflowLLMService(params=BreezeflowLLMService.InputParams(chatbot_id=agent_id))
 
         # Initialize conversation context
         messages = [{"role": "system", "content": system_prompt}]
@@ -76,18 +67,20 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         context_aggregator = llm.create_context_aggregator(context)
 
         rtvi = RTVIProcessor(config=RTVIConfig(config=[]))
-        
+
         # Set up pipeline
-        pipeline = Pipeline([
-            transport.input(),
-            rtvi,
-            stt,
-            context_aggregator.user(),
-            llm,
-            tts,
-            transport.output(),
-            context_aggregator.assistant(),
-        ])
+        pipeline = Pipeline(
+            [
+                transport.input(),
+                rtvi,
+                stt,
+                context_aggregator.user(),
+                llm,
+                tts,
+                transport.output(),
+                context_aggregator.assistant(),
+            ]
+        )
 
         # Create pipeline task
         task = PipelineTask(
@@ -111,18 +104,17 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         @transport.event_handler("on_first_participant_joined")
         async def on_first_participant_joined(transport, participant):
             await transport.capture_participant_transcription(participant["id"])
-            messages.append(
-                {"role": "system", "content": "Please introduce yourself to the user."})
+            messages.append({"role": "system", "content": "Please introduce yourself to the user."})
             await task.queue_frames([context_aggregator.user().get_context_frame()])
 
         # Create and run pipeline
         runner = PipelineRunner()
         await runner.run(task)
-        
 
     except Exception as e:
         logger.error(f"Agent runtime error: {e}")
         raise
+
 
 if __name__ == "__main__":
     # Get command line arguments

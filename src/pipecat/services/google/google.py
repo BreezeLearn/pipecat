@@ -1858,19 +1858,23 @@ class GoogleSTTService(STTService):
         except Exception as e:
             logger.error(f"Error processing Google STT responses: {e}")
 
+
 import aiohttp
 from dataclasses import asdict
+
 
 @dataclass
 class BreezeflowMessage:
     """Message format for Breezeflow API"""
+
     id: str
     text: str
     role: str
 
+
 class BreezeflowLLMService(LLMService):
     """Implementation of Breezeflow's chat API as an LLM service"""
-    
+
     class InputParams(BaseModel):
         chatbot_id: str
         api_url: str = "https://staging.breezeflow.io/api/agent/chat"
@@ -1901,8 +1905,8 @@ class BreezeflowLLMService(LLMService):
 
                 # Handle both dict and Content object formats
                 if isinstance(msg, dict):
-                    role = msg['role']
-                    text = msg.get('content', '')
+                    role = msg["role"]
+                    text = msg.get("content", "")
                 else:
                     # Handle Google Content object
                     role = "assistant" if msg.role == "model" else msg.role
@@ -1913,13 +1917,13 @@ class BreezeflowLLMService(LLMService):
                 # Convert role if needed
                 if role == "model":
                     role = "assistant"
-                
+
                 if text:
                     messages.append(
                         BreezeflowMessage(
                             id=str(time.time()),  # Using timestamp as ID
                             text=text,
-                            role=role
+                            role=role,
                         )
                     )
 
@@ -1936,7 +1940,7 @@ class BreezeflowLLMService(LLMService):
                     json={
                         "message": last_message,
                         "messages": messages_dict,
-                    }
+                    },
                 ) as response:
                     if not response.ok:
                         error_text = await response.text()
@@ -1950,10 +1954,10 @@ class BreezeflowLLMService(LLMService):
                     async for chunk in response.content.iter_chunks():
                         if not chunk:
                             continue
-                        
-                        chunk_text = chunk[0].decode('utf-8')
-                        lines = [line.strip() for line in chunk_text.split('\n') if line.strip()]
-                        
+
+                        chunk_text = chunk[0].decode("utf-8")
+                        lines = [line.strip() for line in chunk_text.split("\n") if line.strip()]
+
                         for line in lines:
                             if line.startswith("0:"):
                                 try:
@@ -1995,11 +1999,11 @@ class BreezeflowLLMService(LLMService):
         context: OpenAILLMContext, *, assistant_expect_stripped_words: bool = True
     ) -> GoogleContextAggregatorPair:
         """Create context aggregator for handling messages.
-        
+
         Args:
             context: The OpenAILLMContext to use
             assistant_expect_stripped_words: Whether to expect stripped words in assistant responses
-            
+
         Returns:
             GoogleContextAggregatorPair: Pair of user and assistant aggregators
         """

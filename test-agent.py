@@ -51,23 +51,18 @@ async def main():
         stt = DeepgramSTTService(
             api_key=os.getenv("DEEPGRAM_API_KEY"),
             live_options=LiveOptions(
-                model="nova-2-general",
-                language="en-US",
-                smart_format=True,
-                vad_events=True
-            )
+                model="nova-2-general", language="en-US", smart_format=True, vad_events=True
+            ),
         )
         tts = DeepgramTTSService(
-    api_key=os.getenv("DEEPGRAM_API_KEY"),
-    voice="aura-helios-en",
-    sample_rate=24000
-)
+            api_key=os.getenv("DEEPGRAM_API_KEY"), voice="aura-helios-en", sample_rate=24000
+        )
 
         llm = BreezeflowLLMService(
-    params=BreezeflowLLMService.InputParams(
-        chatbot_id="2c5bac06-ddfe-420d-871f-c5478beecad9"
-    )
-)
+            params=BreezeflowLLMService.InputParams(
+                chatbot_id="2c5bac06-ddfe-420d-871f-c5478beecad9"
+            )
+        )
 
         messages = [
             {
