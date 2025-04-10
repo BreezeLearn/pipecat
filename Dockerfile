@@ -4,9 +4,6 @@ FROM python:3.11.5
 # Set working directory
 WORKDIR /app
 
-# Copy requirements file first (to leverage Docker's caching mechanism)
-COPY requirements.txt /app/
-
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     gcc \
@@ -17,11 +14,12 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
-
-# Copy application source code
+# Copy application source code first
 COPY . /app/
+
+# Now install Python dependencies
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 # OpenSSL Installation (for Azure TTS or any SSL-related requirements)
 RUN wget -O - https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar zxf - && \
