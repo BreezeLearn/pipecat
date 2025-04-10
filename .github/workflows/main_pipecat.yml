@@ -67,7 +67,6 @@ jobs:
       - name: Unzip artifact for deployment
         run: unzip release.zip
 
-      
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -81,4 +80,10 @@ jobs:
         with:
           app-name: 'pipecat'
           slot-name: 'Production'
+          package: release.zip
+          start-up-command: |
+            pip install --upgrade pip
+            pip install -r requirements.txt
+            pip install "pipecat-ai[daily,openai,azure,silero,anthropic,google]"
+            uvicorn main:app --host 0.0.0.0 --port 8000
           
