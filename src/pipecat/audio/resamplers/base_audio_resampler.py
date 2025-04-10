@@ -14,8 +14,7 @@ class BaseAudioResampler(ABC):
 
     @abstractmethod
     async def resample(self, audio: bytes, in_rate: int, out_rate: int) -> bytes:
-        """
-        Resamples the given audio data to a different sample rate.
+        """Resamples the given audio data to a different sample rate.
 
         This is an abstract method that must be implemented in subclasses.
 

@@ -5,7 +5,6 @@ from typing import Tuple
 
 import aiohttp
 from dotenv import load_dotenv
-from runner import configure
 
 from pipecat.frames.frames import AudioFrame, EndFrame, ImageFrame, LLMMessagesFrame, TextFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -14,6 +13,7 @@ from pipecat.services.azure import AzureLLMService, AzureTTSService
 from pipecat.services.elevenlabs import ElevenLabsTTSService
 from pipecat.services.fal import FalImageGenService
 from pipecat.transports.services.daily import DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 
@@ -72,7 +72,8 @@ async def main():
 
         async def get_text_and_audio(messages) -> Tuple[str, bytearray]:
             """This function streams text from the LLM and uses the TTS service to convert
-            that text to speech as it's received."""
+            that text to speech as it's received.
+            """
             source_queue = asyncio.Queue()
             sink_queue = asyncio.Queue()
             sentence_aggregator = SentenceAggregator()

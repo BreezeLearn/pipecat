@@ -11,13 +11,13 @@ import sys
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure_with_args
 
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineTask
 from pipecat.processors.gstreamer.pipeline_source import GStreamerPipelineSource
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure_with_args
 
 load_dotenv(override=True)
 

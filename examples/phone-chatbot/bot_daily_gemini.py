@@ -157,7 +157,6 @@ async def terminate_call(
     function_name, tool_call_id, args, llm: LLMService, context, result_callback
 ):
     """Function the bot can call to terminate the call upon completion of the call."""
-
     await llm.queue_frame(EndTaskFrame(), FrameDirection.UPSTREAM)
 
 

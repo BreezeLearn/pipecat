@@ -12,7 +12,6 @@ from dataclasses import dataclass
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.frames.frames import (
     DataFrame,
@@ -31,6 +30,7 @@ from pipecat.services.cartesia import CartesiaHttpTTSService
 from pipecat.services.fal import FalImageGenService
 from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

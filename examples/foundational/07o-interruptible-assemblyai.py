@@ -11,7 +11,6 @@ import sys
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
@@ -22,6 +21,7 @@ from pipecat.services.assemblyai import AssemblyAISTTService
 from pipecat.services.cartesia import CartesiaTTSService
 from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

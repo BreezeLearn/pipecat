@@ -11,7 +11,6 @@ import sys
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.frames.frames import EndFrame, LLMMessagesFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -20,6 +19,7 @@ from pipecat.pipeline.task import PipelineTask
 from pipecat.services.cartesia import CartesiaTTSService
 from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

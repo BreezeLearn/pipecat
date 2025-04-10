@@ -10,7 +10,6 @@ import sys
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.frames.frames import (
     Frame,
@@ -24,6 +23,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 
