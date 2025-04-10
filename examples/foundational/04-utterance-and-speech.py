@@ -15,7 +15,6 @@ import sys
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.frames.frames import EndPipeFrame, LLMMessagesFrame, TextFrame
 from pipecat.pipeline.merge_pipeline import SequentialMergePipeline
@@ -25,6 +24,7 @@ from pipecat.services.azure import AzureLLMService, AzureTTSService
 from pipecat.services.elevenlabs import ElevenLabsTTSService
 from pipecat.services.transport_services import TransportServiceOutput
 from pipecat.services.transports.daily_transport import DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

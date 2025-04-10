@@ -6,7 +6,8 @@ from pipecat.pipeline.pipeline import Pipeline
 
 class SequentialMergePipeline(Pipeline):
     """This class merges the sink queues from a list of pipelines. Frames from
-    each pipeline's sink are merged in the order of pipelines in the list."""
+    each pipeline's sink are merged in the order of pipelines in the list.
+    """
 
     def __init__(self, pipelines: List[Pipeline]):
         super().__init__([])

@@ -13,7 +13,6 @@ from typing import List, Optional
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import TranscriptionMessage, TranscriptionUpdateFrame
@@ -27,6 +26,7 @@ from pipecat.services.deepgram import DeepgramSTTService
 from pipecat.services.google import GoogleLLMService
 from pipecat.services.openai import OpenAILLMContext
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

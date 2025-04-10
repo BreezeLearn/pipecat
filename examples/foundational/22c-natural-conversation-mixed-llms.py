@@ -13,7 +13,6 @@ import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
 from openai.types.chat import ChatCompletionToolParam
-from runner import configure
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
@@ -51,6 +50,7 @@ from pipecat.services.openai import OpenAILLMService
 from pipecat.sync.base_notifier import BaseNotifier
 from pipecat.sync.event_notifier import EventNotifier
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

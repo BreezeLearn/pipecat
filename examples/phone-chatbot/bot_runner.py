@@ -1,5 +1,4 @@
-"""
-bot_runner.py
+"""bot_runner.py
 
 HTTP service that listens for incoming calls from either Daily or Twilio,
 provisioning a room and starting a Pipecat bot in response.

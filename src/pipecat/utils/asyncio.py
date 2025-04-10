@@ -24,8 +24,7 @@ class TaskManager:
         return self._loop
 
     def create_task(self, coroutine: Coroutine, name: str) -> asyncio.Task:
-        """
-        Creates and schedules a new asyncio Task that runs the given coroutine.
+        """Creates and schedules a new asyncio Task that runs the given coroutine.
 
         The task is added to a global set of created tasks.
 

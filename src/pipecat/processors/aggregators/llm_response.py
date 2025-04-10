@@ -81,7 +81,8 @@ class BaseLLMResponseAggregator(FrameProcessor):
     @abstractmethod
     def reset(self):
         """Reset the internals of this aggregator. This should not modify the
-        internal messages."""
+        internal messages.
+        """
         pass
 
     @abstractmethod

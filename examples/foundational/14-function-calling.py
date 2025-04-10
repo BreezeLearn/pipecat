@@ -12,7 +12,6 @@ import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
 from openai.types.chat import ChatCompletionToolParam
-from runner import configure
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import TTSSpeakFrame
@@ -22,6 +21,7 @@ from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.services.cartesia import CartesiaTTSService
 from pipecat.services.openai import OpenAILLMContext, OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

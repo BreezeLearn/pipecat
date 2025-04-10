@@ -13,7 +13,6 @@ import aiohttp
 import google.ai.generativelanguage as glm
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.frames.frames import (
@@ -39,6 +38,7 @@ from pipecat.processors.frame_processor import FrameProcessor
 from pipecat.services.cartesia import CartesiaTTSService
 from pipecat.services.google import GoogleLLMContext, GoogleLLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

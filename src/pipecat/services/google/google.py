@@ -1859,8 +1859,9 @@ class GoogleSTTService(STTService):
             logger.error(f"Error processing Google STT responses: {e}")
 
 
-import aiohttp
 from dataclasses import asdict
+
+import aiohttp
 
 
 @dataclass

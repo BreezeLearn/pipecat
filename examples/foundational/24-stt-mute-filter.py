@@ -12,7 +12,6 @@ import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
 from openai.types.chat import ChatCompletionToolParam
-from runner import configure
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
@@ -23,6 +22,7 @@ from pipecat.processors.filters.stt_mute_filter import STTMuteConfig, STTMuteFil
 from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.services.openai import OpenAILLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 
