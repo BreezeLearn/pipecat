@@ -1873,7 +1873,7 @@ class BreezeflowLLMService(LLMService):
     
     class InputParams(BaseModel):
         chatbot_id: str
-        api_url: str = "https://breezeflow.io/api/agent/chat"
+        api_url: str = "https://staging.breezeflow.io/api/agent/chat"
 
     def __init__(
         self,
