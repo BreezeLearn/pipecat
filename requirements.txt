@@ -62,7 +62,7 @@ openai==1.59.9
 packaging==24.2
 pillow==11.1.0
 pip-tools==7.4.1
--e git+https://github.com/BreezeLearn/pipecat@7be10f51505c64d1171b8814c251c881b6950762#egg=pipecat_ai
+-e .[daily,openai,azure,silero,anthropic,google]
 platformdirs==4.3.6
 pluggy==1.5.0
 pre_commit==4.0.1

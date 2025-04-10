@@ -101,6 +101,13 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
             observers=[RTVIObserver(rtvi)],
         )
 
+        @transport.event_handler("on_participant_left")
+        async def on_participant_left(transport, participant, reason):
+            logger.info(f"Participant left: {participant['id']}")
+            await task.queue_frame(EndFrame())
+            os._exit(0)
+            print("stooped")
+
         @transport.event_handler("on_first_participant_joined")
         async def on_first_participant_joined(transport, participant):
             await transport.capture_participant_transcription(participant["id"])
@@ -111,6 +118,7 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         # Create and run pipeline
         runner = PipelineRunner()
         await runner.run(task)
+        
 
     except Exception as e:
         logger.error(f"Agent runtime error: {e}")
