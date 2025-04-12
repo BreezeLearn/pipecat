@@ -32,6 +32,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
+          pip install pipecat
           pip install -r requirements.azure.txt
           pip install "pipecat-ai[daily,openai,azure,silero,anthropic,google]"
           
@@ -83,6 +84,7 @@ jobs:
           package: release.zip
           start-up-command: |
             pip install --upgrade pip
+            pip install pipecat
             pip install -r requirements.azure.txt
             pip install "pipecat-ai[daily,openai,azure,silero,anthropic,google]"
             uvicorn main:app --host 0.0.0.0 --port 8000

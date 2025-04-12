@@ -20,6 +20,7 @@ COPY . /app/
 # Now install Python dependencies
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt \
+    pip inst
     pip install "pipecat-ai[daily,openai,azure,silero,anthropic,google]"
 
 # OpenSSL Installation (for Azure TTS or any SSL-related requirements)
