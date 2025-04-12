@@ -102,3 +102,4 @@ virtualenv==20.29.2
 websockets==13.1
 wheel==0.45.1
 yarl==1.18.3
+pipecatcloud
