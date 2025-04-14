@@ -16,7 +16,7 @@ from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.vad.vad_analyzer import VADParams
 from deepgram import LiveOptions
 from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
-# from pipecat.services.azure import AzureTTSService, AzureLLMService
+from pipecat.services.azure import AzureTTSService, AzureSTTService
 
 load_dotenv(override=True)
 
@@ -41,23 +41,30 @@ async def run_agent(agent_id: str, room_url: str, system_prompt: str, voice: str
         )
 
         # Create services
-        stt = DeepgramSTTService(
-            api_key=os.getenv("DEEPGRAM_API_KEY"),
-            live_options=LiveOptions(
-                model="nova-2-general", language="en-US", smart_format=True, vad_events=True
-            ),
-        )
-
-        # tts = AzureTTSService(
-        #     api_key=os.getenv("AZURE_SPEECH_API_KEY"),
-        #     region="eastus",
-        #     # en-US-AvaMultilingualNeural en-US-ShimmerMultilingualNeural
-        #     voice="en-US-Ava:DragonHDLatestNeural",
+        # stt = DeepgramSTTService(
+        #     api_key=os.getenv("DEEPGRAM_API_KEY"),
+        #     live_options=LiveOptions(
+        #         model="nova-2-general", language="en-US", smart_format=True, vad_events=True
+        #     ),
         # )
 
-        tts = DeepgramTTSService(
-            api_key=os.getenv("DEEPGRAM_API_KEY"), voice=voice, sample_rate=24000
+        stt = AzureSTTService(
+            api_key=os.getenv("AZURE_STT_SPEECH_API_KEY"),
+            region="eastus",
+            sample_rate=16000,
+            channels=1
         )
+
+        tts = AzureTTSService(
+            api_key=os.getenv("AZURE_SPEECH_API_KEY"),
+            region="eastus",
+            # en-US-AvaMultilingualNeural en-US-ShimmerMultilingualNeural
+            voice=voice,
+        )
+
+        # tts = DeepgramTTSService(
+        #     api_key=os.getenv("DEEPGRAM_API_KEY"), voice=voice, sample_rate=24000
+        # )
 
         llm = BreezeflowLLMService(params=BreezeflowLLMService.InputParams(chatbot_id=agent_id))
 
