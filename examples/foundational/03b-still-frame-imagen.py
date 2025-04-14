@@ -11,7 +11,6 @@ import sys
 import aiohttp
 from dotenv import load_dotenv
 from loguru import logger
-from runner import configure
 
 from pipecat.frames.frames import EndFrame, TextFrame
 from pipecat.pipeline.pipeline import Pipeline
@@ -19,6 +18,7 @@ from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.services.google import GoogleImageGenService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
+from runner import configure
 
 load_dotenv(override=True)
 

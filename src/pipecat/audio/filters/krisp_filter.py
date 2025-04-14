@@ -21,9 +21,7 @@ except ModuleNotFoundError as e:
 
 
 class KrispProcessorManager:
-    """
-    Ensures that only one KrispAudioProcessor instance exists for the entire program.
-    """
+    """Ensures that only one KrispAudioProcessor instance exists for the entire program."""
 
     _krisp_instance = None
 

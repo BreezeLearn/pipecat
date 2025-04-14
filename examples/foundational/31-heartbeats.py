@@ -29,7 +29,6 @@ async def main():
     heartbeats are not received.
 
     """
-
     pipeline = Pipeline([NullProcessor()])
 
     task = PipelineTask(pipeline, PipelineParams(enable_heartbeats=True))

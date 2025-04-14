@@ -2,20 +2,22 @@ import asyncio
 import os
 import sys
 from typing import Optional
-from loguru import logger
+
+from deepgram import LiveOptions
 from dotenv import load_dotenv
+from loguru import logger
 
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.pipeline.pipeline import Pipeline
 from pipecat.pipeline.runner import PipelineRunner
 from pipecat.pipeline.task import PipelineParams, PipelineTask
 from pipecat.processors.aggregators.openai_llm_context import OpenAILLMContext
+from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
+from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.services.google import BreezeflowLLMService
 from pipecat.transports.services.daily import DailyParams, DailyTransport
-from pipecat.services.deepgram import DeepgramSTTService, DeepgramTTSService
 from pipecat.vad.vad_analyzer import VADParams
-from deepgram import LiveOptions
-from pipecat.processors.frameworks.rtvi import RTVIConfig, RTVIObserver, RTVIProcessor
+
 # from pipecat.services.azure import AzureTTSService, AzureLLMService
 
 load_dotenv(override=True)

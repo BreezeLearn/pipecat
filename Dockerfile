@@ -19,7 +19,7 @@ COPY . /app/
 
 # Now install Python dependencies
 RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt 
 
 # OpenSSL Installation (for Azure TTS or any SSL-related requirements)
 RUN wget -O - https://www.openssl.org/source/openssl-1.1.1w.tar.gz | tar zxf - && \
